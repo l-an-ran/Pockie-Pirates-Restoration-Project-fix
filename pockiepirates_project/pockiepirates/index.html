@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>小小海贼王 (Pockie Pirates) 本地网页版</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        #topbar {
+            height: 40px;
+            background: #111827;
+            border-bottom: 1px solid #1f2937;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            color: #e5e7eb;
+        }
+        #game-frame {
+            width: 100%;
+            height: calc(100% - 40px);
+            border: none;
+            display: block;
+        }
+        .btn {
+            background: #374151;
+            color: #fff;
+            padding: 5px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 12px;
+            margin-left: 8px;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #4b5563; }
+        .btn-active { background: #059669 !important; font-weight: bold; }
+        .btn-blue { background: #2563eb; }
+        .btn-blue:hover { background: #1d4ed8; }
+        .btn-battle {
+            background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%) !important;
+            border: 1px solid #ef4444;
+            font-weight: bold;
+            color: #fff !important;
+            animation: pulseGlow 2s infinite;
+        }
+        .btn-battle:hover {
+            background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%) !important;
+            transform: scale(1.05);
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.9); }
+        }
+
+        #battle-overlay {
+            position: fixed;
+            top: 40px;
+            left: 0;
+            width: 100%;
+            height: calc(100% - 40px);
+            background: #000;
+            z-index: 999;
+            display: none;
+        }
+        #battle-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar">
+        <div>
+            <strong style="color: #f59e0b;">⚓ 《小小海贼王》本地单机版</strong>
+            <span style="color: #10b981; font-size: 11px; margin-left: 10px;">● 服务端已就绪 (8888)</span>
+        </div>
+        <div>
+            <button class="btn" style="background:#7c2d12; border:1px solid #ea580c;" onclick="resetTask(100001)">🔄 重置任务到起点(100001)</button>
+            <button class="btn" style="background:#431407; border:1px solid #c2410c;" onclick="resetTask(100007)">⚔️ 重置为第一场战斗(100007)</button>
+            <button class="btn btn-battle" onclick="openBattleModal()">⚔️ 观看官方原版战斗实景 (超级沙暴)</button>
+            <a href="/onepiece/launcher.html" class="btn btn-active" onclick="setActive(this)" target="gameFrame">▶️ 官方加载器 (GameLoader)</a>
+            <a href="/onepiece/main.html" class="btn" onclick="setActive(this)" target="gameFrame">⚡ 直连模式 (main)</a>
+            <a href="/onepiece/launcher.html" class="btn btn-blue" target="_top">🖥️ 进入原生全屏页</a>
+            <a href="/status" target="_blank" class="btn">📊 状态监控</a>
+        </div>
+    </div>
+    <iframe id="game-frame" name="gameFrame" src="/onepiece/launcher.html"></iframe>
+
+    <div id="battle-overlay">
+        <iframe id="battle-frame" src=""></iframe>
+    </div>
+
+    <script>
+        function resetTask(taskId) {
+            taskId = taskId || 100001;
+            fetch('/reset_task?id=' + taskId)
+                .then(r => r.json())
+                .then(d => {
+                    alert('✅ 任务重置成功！当前任务已设为: ' + taskId + '\n页面将自动刷新生效。');
+                    var gf = document.getElementById('game-frame');
+                    if (gf) { gf.src = gf.src; }
+                })
+                .catch(e => {
+                    alert('重置失败: ' + e);
+                });
+        }
+
+        function setActive(el) {
+            var btns = document.querySelectorAll('#topbar .btn');
+            btns.forEach(function(b) { b.classList.remove('btn-active'); });
+            el.classList.add('btn-active');
+        }
+
+        function openBattleModal() {
+            var overlay = document.getElementById('battle-overlay');
+            var frame = document.getElementById('battle-frame');
+            frame.src = '/battle.html';
+            overlay.style.display = 'block';
+        }
+
+        function closeBattleModal() {
+            var overlay = document.getElementById('battle-overlay');
+            var frame = document.getElementById('battle-frame');
+            overlay.style.display = 'none';
+            frame.src = '';
+        }
+
+        function onBattleCompleted() {
+            closeBattleModal();
+            alert('🎉 第一场战斗大捷！\n【三号见习剑士组】已被击溃，任务【海贼的复仇】(100007) 目标已达成！\n现在您可以与镇长 (Mayor) 对话提交任务并领取通关奖励！');
+        }
+    </script>
+</body>
+</html>

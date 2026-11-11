@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小小海贼王 - 第一场战役：风车村·海贼袭击战</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            background: #020617;
+            color: #f8fafc;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 纯净战场背景（仅使用官方风车村浅滩木甲板战场 原生背景，不添加任何拼贴杂物） */
+        #battle-root {
+            width: 1000px;
+            height: 600px;
+            position: relative;
+            background: url('/images/scene/campbattlebg_1.png') no-repeat center center;
+            background-size: 1000px 600px;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.95);
+        }
+
+        /* 顶部场景控制栏（重播、战歌） */
+        #dev-controls {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            z-index: 50;
+            display: flex;
+            gap: 8px;
+        }
+        .mini-btn {
+            background: rgba(15, 23, 42, 0.85);
+            color: #facc15;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        .mini-btn:hover { background: #334155; color: #fff; }
+
+        /* 战场角色层 */
+        #battlefield {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1000px;
+            height: 600px;
+            z-index: 10;
+        }
+
+        /* 单个战斗角色容器 (400x300 原生动画帧规格) */
+        .fighter {
+            position: absolute;
+            width: 400px;
+            height: 300px;
+            pointer-events: none;
+            transition: transform 0.25s ease-out;
+        }
+        .fighter img.sprite {
+            width: 400px;
+            height: 300px;
+            display: block;
+        }
+
+        /* 敌方单位朝向镜像反转：敌方在右侧，面朝左方进攻 */
+        .fighter.enemy-unit img.sprite {
+            transform: scaleX(-1);
+        }
+
+        /* 角色血条与名字容器 */
+        .fighter-ui {
+            position: absolute;
+            top: 75px;
+            left: 110px;
+            width: 180px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            pointer-events: auto;
+        }
+        .fighter-name {
+            font-size: 14px;
+            font-weight: 900;
+            color: #ef4444;
+            text-shadow: 0 0 4px #000, 0 0 8px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            letter-spacing: 0.5px;
+        }
+        .fighter-name.player {
+            color: #38bdf8;
+        }
+        .hp-bar-bg {
+            width: 120px;
+            height: 8px;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #1e293b;
+            border-radius: 2px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);
+        }
+        .hp-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #dc2626, #f87171);
+            width: 100%;
+            transition: width 0.4s ease;
+        }
+        .hp-bar-fill.player {
+            background: linear-gradient(90deg, #2563eb, #60a5fa);
+        }
+
+        /* 呼吸待机 */
+        .anim-idle {
+            animation: breathe 2.2s ease-in-out infinite alternate;
+        }
+        @keyframes breathe {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-4px); }
+        }
+
+        /* 冲锋与受击 */
+        .anim-lunge-right {
+            animation: lungeRight 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+        @keyframes lungeRight {
+            0% { transform: translateX(0); }
+            35% { transform: translateX(230px) scale(1.06); }
+            70% { transform: translateX(200px); }
+            100% { transform: translateX(0); }
+        }
+
+        .anim-lunge-left {
+            animation: lungeLeft 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+        @keyframes lungeLeft {
+            0% { transform: translateX(0); }
+            35% { transform: translateX(-230px) scale(1.06); }
+            70% { transform: translateX(-200px); }
+            100% { transform: translateX(0); }
+        }
+
+        .anim-hit {
+            animation: hitReaction 0.4s ease-out;
+        }
+        @keyframes hitReaction {
+            0% { transform: translateX(0); filter: brightness(1); }
+            20% { transform: translateX(18px); filter: brightness(2.6) drop-shadow(0 0 16px rgba(255,255,255,0.9)); }
+            50% { transform: translateX(-8px); filter: brightness(1.5); }
+            100% { transform: translateX(0); filter: brightness(1); }
+        }
+
+        /* 纯正原版伤害飘字与暴击 */
+        .damage-number-box {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 35;
+            pointer-events: none;
+            animation: floatUpDamage 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+        }
+        @keyframes floatUpDamage {
+            0% { transform: translateY(0) scale(0.6); opacity: 0; }
+            15% { transform: translateY(-24px) scale(1.3); opacity: 1; }
+            35% { transform: translateY(-40px) scale(1.0); opacity: 1; }
+            75% { transform: translateY(-62px) scale(0.96); opacity: 0.95; }
+            100% { transform: translateY(-80px) scale(0.9); opacity: 0; }
+        }
+        .damage-text {
+            font-family: "Impact", "Arial Black", "Microsoft YaHei", sans-serif;
+            font-size: 38px;
+            font-weight: 900;
+            font-style: italic;
+            color: #ff3b14;
+            -webkit-text-stroke: 1.5px #000;
+            text-shadow: 
+                -2px -2px 0 #000, 
+                 2px -2px 0 #000, 
+                -2px  2px 0 #000, 
+                 2px  2px 0 #000, 
+                 0 0 6px #ff1a00,
+                 0 3px 6px rgba(0,0,0,0.9);
+            letter-spacing: -1px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .damage-text.crit {
+            font-size: 46px;
+            color: #ff9900;
+            -webkit-text-stroke: 1.8px #000;
+            text-shadow: 
+                -2px -2px 0 #000, 
+                 2px -2px 0 #000, 
+                -2px  2px 0 #000, 
+                 2px  2px 0 #000, 
+                 0 0 10px #ff3300,
+                 0 4px 8px rgba(0,0,0,0.9);
+        }
+        .crit-title {
+            font-family: "Microsoft YaHei", "SimHei", sans-serif;
+            font-size: 26px;
+            font-weight: 900;
+            color: #ff1e00;
+            -webkit-text-stroke: 1.2px #fff;
+            text-shadow: 
+                -2px -2px 0 #8b0000, 
+                 2px -2px 0 #8b0000, 
+                -2px  2px 0 #8b0000, 
+                 2px  2px 0 #8b0000, 
+                 0 0 8px #ff0000;
+            letter-spacing: 2px;
+            margin-bottom: 2px;
+            line-height: 1;
+        }
+
+        /* 官方原生技能名：剑技·狂风 (参考原版超级沙暴风格) */
+        #skill-banner {
+            position: absolute;
+            top: 240px;
+            left: 0;
+            right: 0;
+            height: 90px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.65) 25%, rgba(0,0,0,0.65) 75%, transparent);
+            font-family: "Microsoft YaHei", "SimHei", sans-serif;
+            font-size: 52px;
+            font-weight: 900;
+            font-style: italic;
+            color: #ffaa00;
+            -webkit-text-stroke: 2.2px #8b1100;
+            text-shadow: 
+                -3px -3px 0 #550000, 
+                 3px -3px 0 #550000, 
+                -3px  3px 0 #550000, 
+                 3px  3px 0 #550000, 
+                 0 0 22px #ff4400,
+                 0 6px 12px rgba(0,0,0,0.95);
+            letter-spacing: 6px;
+            animation: bannerPop 0.85s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+        @keyframes bannerPop {
+            0% { transform: scale(0.5); opacity: 0; }
+            30% { transform: scale(1.15); opacity: 1; }
+            70% { transform: scale(1.0); opacity: 1; }
+            100% { transform: scale(1.0); opacity: 1; }
+        }
+
+        /* 战役胜利弹窗 */
+        #victory-dialog {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.65);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            animation: fadeIn 0.4s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .victory-card {
+            background: #0f172a;
+            border: 2px solid #facc15;
+            border-radius: 8px;
+            padding: 24px 36px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 0 40px rgba(250, 204, 21, 0.4);
+            gap: 12px;
+        }
+        .victory-title {
+            font-size: 28px;
+            font-weight: 900;
+            color: #facc15;
+            text-shadow: 0 2px 8px #000;
+        }
+        .victory-desc {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        .victory-btn {
+            background: linear-gradient(180deg, #eab308, #ca8a04);
+            color: #000;
+            font-weight: bold;
+            padding: 8px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 8px;
+            font-size: 15px;
+            transition: transform 0.15s;
+        }
+        .victory-btn:hover {
+            transform: scale(1.05);
+            filter: brightness(1.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="battle-root">
+        <!-- 场景控制栏 -->
+        <div id="dev-controls">
+            <button class="mini-btn" onclick="startBattle()">▶ 重新开始战斗</button>
+            <button class="mini-btn" onclick="toggleMusic()">🎵 播放战歌</button>
+        </div>
+
+        <!-- 战场角色层 (左侧主角·剑豪，右侧敌方见习剑士并设置scaleX(-1)面向左侧) -->
+        <div id="battlefield">
+            <!-- 玩家主角：剑豪 (soldier1001) -->
+            <div id="fighter-player" class="fighter anim-idle" style="left: 120px; top: 160px;">
+                <div class="fighter-ui">
+                    <div class="fighter-name player">主角·剑豪 Lv.1</div>
+                    <div class="hp-bar-bg">
+                        <div id="hp-player" class="hp-bar-fill player" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <img id="sprite-player" class="sprite" src="/images/battle_sprites/protagonist_swordsman_stop_0.png" alt="主角剑豪" />
+            </div>
+
+            <!-- 敌方怪物：见习剑士 (soldier10004)，设置 enemy-unit 类让其面朝左侧 -->
+            <div id="fighter-enemy" class="fighter enemy-unit anim-idle" style="left: 480px; top: 160px;">
+                <div class="fighter-ui">
+                    <div class="fighter-name">见习剑士 Lv.1</div>
+                    <div class="hp-bar-bg">
+                        <div id="hp-enemy" class="hp-bar-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <img id="sprite-enemy" class="sprite" src="/images/battle_sprites/trainee_swordsman_stop_0.png" alt="见习剑士" />
+            </div>
+        </div>
+
+        <!-- 官方原生技能名：剑技·狂风 -->
+        <div id="skill-banner">剑技·狂风</div>
+
+        <!-- 战役胜利弹窗 -->
+        <div id="victory-dialog">
+            <div class="victory-card">
+                <div class="victory-title">★ 战 役 胜 利 ★</div>
+                <div class="victory-desc">第1章 风车村：任务 100003【勇敢的战斗】已达成！</div>
+                <div style="font-size: 13px; color: #facc15; margin: 4px 0;">获得经验: +30 | 获得银币: +150 | 评定: 3星</div>
+                <button class="victory-btn" onclick="startBattle()">再次挑战</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 背景战斗音频 -->
+    <audio id="bgm" loop preload="auto">
+        <source src="/audio/FightMusic.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const battleState = {
+            player: {
+                name: '主角·剑豪',
+                maxHp: 450,
+                hp: 450,
+                atk: 105
+            },
+            enemy: {
+                name: '见习剑士',
+                maxHp: 224, // 官方 cfg_monster 100001 原生真实血量 224
+                hp: 224,
+                atk: 45
+            },
+            finished: false
+        };
+
+        const bgm = document.getElementById('bgm');
+        let bgmStarted = false;
+
+        function toggleMusic() {
+            if (!bgmStarted) {
+                bgm.play().then(() => {
+                    bgmStarted = true;
+                }).catch(() => {});
+            } else {
+                if (bgm.paused) bgm.play();
+                else bgm.pause();
+            }
+        }
+
+        // 呼吸帧动画切换
+        let breatheTimer = setInterval(() => {
+            if (battleState.finished) return;
+            const p = document.getElementById('sprite-player');
+            const e = document.getElementById('sprite-enemy');
+            if (p && (p.dataset.state === 'stop' || !p.dataset.state)) {
+                const cur = p.src.includes('_stop_0') ? '1' : '0';
+                p.src = `/images/battle_sprites/protagonist_swordsman_stop_${cur}.png`;
+            }
+            if (e && (e.dataset.state === 'stop' || !e.dataset.state)) {
+                const cur = e.src.includes('_stop_0') ? '1' : '0';
+                e.src = `/images/battle_sprites/trainee_swordsman_stop_${cur}.png`;
+            }
+        }, 550);
+
+        // 弹出伤害数字与暴击标识（原版高清数字质感）
+        function showDamage(targetEl, damage, isCrit = false) {
+            const rect = targetEl.getBoundingClientRect();
+            const rootRect = document.getElementById('battle-root').getBoundingClientRect();
+            
+            const box = document.createElement('div');
+            box.className = 'damage-number-box';
+            box.style.left = (rect.left - rootRect.left + 140) + 'px';
+            box.style.top = (rect.top - rootRect.top + 25) + 'px';
+
+            if (isCrit) {
+                const critTitle = document.createElement('span');
+                critTitle.className = 'crit-title';
+                critTitle.textContent = '暴击';
+                box.appendChild(critTitle);
+
+                const dmgText = document.createElement('span');
+                dmgText.className = 'damage-text crit';
+                dmgText.textContent = '-' + damage;
+                box.appendChild(dmgText);
+            } else {
+                const dmgText = document.createElement('span');
+                dmgText.className = 'damage-text';
+                dmgText.textContent = '-' + damage;
+                box.appendChild(dmgText);
+            }
+
+            document.getElementById('battle-root').appendChild(box);
+            setTimeout(() => box.remove(), 1250);
+        }
+
+        // 第一战战斗流程演播
+        function startBattle() {
+            document.getElementById('victory-dialog').style.display = 'none';
+            battleState.finished = false;
+            battleState.player.hp = battleState.player.maxHp;
+            battleState.enemy.hp = battleState.enemy.maxHp;
+            updateHpBars();
+
+            const pFighter = document.getElementById('fighter-player');
+            const eFighter = document.getElementById('fighter-enemy');
+            const pSprite = document.getElementById('sprite-player');
+            const eSprite = document.getElementById('sprite-enemy');
+
+            pFighter.style.opacity = '1';
+            pFighter.style.transform = 'translateY(0)';
+            eFighter.style.opacity = '1';
+            eFighter.style.transform = 'translateY(0)';
+
+            pSprite.dataset.state = 'stop';
+            eSprite.dataset.state = 'stop';
+            pSprite.src = '/images/battle_sprites/protagonist_swordsman_stop_0.png';
+            eSprite.src = '/images/battle_sprites/trainee_swordsman_stop_0.png';
+
+            // 回合 1：见习剑士向左冲刺攻击主角
+            setTimeout(() => {
+                if (battleState.finished) return;
+                eSprite.dataset.state = 'attack';
+                eSprite.src = '/images/battle_sprites/trainee_swordsman_attack_0.png';
+                eFighter.classList.add('anim-lunge-left');
+
+                setTimeout(() => {
+                    eSprite.src = '/images/battle_sprites/trainee_swordsman_attack_1.png';
+                    // 主角受击
+                    pSprite.dataset.state = 'hurt';
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_hurt_0.png';
+                    pFighter.classList.add('anim-hit');
+
+                    const dmg = 42;
+                    battleState.player.hp = Math.max(0, battleState.player.hp - dmg);
+                    updateHpBars();
+                    showDamage(pFighter, dmg, false);
+                }, 220);
+
+                setTimeout(() => {
+                    eSprite.src = '/images/battle_sprites/trainee_swordsman_attack_2.png';
+                }, 380);
+
+                setTimeout(() => {
+                    eFighter.classList.remove('anim-lunge-left');
+                    pFighter.classList.remove('anim-hit');
+                    eSprite.dataset.state = 'stop';
+                    pSprite.dataset.state = 'stop';
+                    eSprite.src = '/images/battle_sprites/trainee_swordsman_stop_0.png';
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_stop_0.png';
+                }, 600);
+
+            }, 1000);
+
+            // 回合 2：主角释放原生技能【剑技·狂风】
+            setTimeout(() => {
+                if (battleState.finished) return;
+                // 技能名称横幅
+                const banner = document.getElementById('skill-banner');
+                banner.style.display = 'flex';
+                setTimeout(() => { banner.style.display = 'none'; }, 900);
+
+                // 主角技能动画序列帧
+                pSprite.dataset.state = 'skill';
+                pSprite.src = '/images/battle_sprites/protagonist_swordsman_skill_0.png';
+                pFighter.classList.add('anim-lunge-right');
+
+                setTimeout(() => {
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_skill_1.png';
+                }, 120);
+
+                setTimeout(() => {
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_skill_2.png';
+                }, 240);
+
+                setTimeout(() => {
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_skill_3.png';
+                    // 命中敌方
+                    eSprite.dataset.state = 'hurt';
+                    eSprite.src = '/images/battle_sprites/trainee_swordsman_hurt_0.png';
+                    eFighter.classList.add('anim-hit');
+
+                    // 暴击直接秒杀见习剑士
+                    const dmg = 238;
+                    battleState.enemy.hp = 0;
+                    updateHpBars();
+                    showDamage(eFighter, dmg, true);
+                }, 360);
+
+                setTimeout(() => {
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_skill_4.png';
+                }, 480);
+
+                setTimeout(() => {
+                    pFighter.classList.remove('anim-lunge-right');
+                    eFighter.classList.remove('anim-hit');
+                    pSprite.dataset.state = 'stop';
+                    pSprite.src = '/images/battle_sprites/protagonist_swordsman_stop_0.png';
+                    
+                    // 敌方倒下退场
+                    eFighter.style.transition = 'opacity 0.6s, transform 0.6s';
+                    eFighter.style.opacity = '0';
+                    eFighter.style.transform = 'translateY(20px)';
+
+                    // 战役胜利弹窗
+                    setTimeout(() => {
+                        battleState.finished = true;
+                        document.getElementById('victory-dialog').style.display = 'flex';
+                    }, 800);
+                }, 700);
+
+            }, 2600);
+        }
+
+        function updateHpBars() {
+            const pPct = Math.max(0, (battleState.player.hp / battleState.player.maxHp) * 100);
+            const ePct = Math.max(0, (battleState.enemy.hp / battleState.enemy.maxHp) * 100);
+            document.getElementById('hp-player').style.width = pPct + '%';
+            document.getElementById('hp-enemy').style.width = ePct + '%';
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(startBattle, 400);
+        });
+    </script>
+</body>
+</html>

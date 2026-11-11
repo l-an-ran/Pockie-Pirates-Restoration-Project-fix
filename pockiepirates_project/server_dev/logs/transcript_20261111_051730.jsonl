@@ -1,0 +1,2 @@
+{"t": 1794346970.484185, "type": "packet_in", "path": "/messagebroker//amf", "bodies": 0, "parsed": "{'version': 3, 'headers': [], 'bodies': []}"}
+{"t": 1794346970.4844458, "type": "packet_out", "response_hex": "000300000000", "response_size": 6}
